@@ -4,6 +4,16 @@ Chrome MV3 extension for sending M-Team torrents to qBittorrent Web UI.
 
 [中文说明](README.zh-CN.md)
 
+## Screenshots
+
+### Options
+
+![Options page](assets/screenshots/options-page.png)
+
+### Floating Panel
+
+![Floating panel](assets/screenshots/floating-panel.png)
+
 ## Install
 
 1. Open `chrome://extensions/`.

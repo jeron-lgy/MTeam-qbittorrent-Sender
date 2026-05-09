@@ -12,6 +12,16 @@
 - 兼容 qBittorrent 5.2.x 的 Web API 行为，包括 `HTTP 204` 和 `HTTP 202 pending` 响应。
 - 发送后会在页面上显示中文状态，例如“发送成功”“qB 已接收”“后台处理中”。
 
+## 截图
+
+### 配置页面
+
+![配置页面](assets/screenshots/options-page.png)
+
+### 页面悬浮面板
+
+![页面悬浮面板](assets/screenshots/floating-panel.png)
+
 ## 安装
 
 1. 打开 Chrome 的 `chrome://extensions/`。
