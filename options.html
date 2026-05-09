@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <title>MTeam qB Sender</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main>
+      <h1>MTeam qB Sender</h1>
+      <label>
+        <span>qBittorrent Web UI 地址</span>
+        <input id="qbAddress" placeholder="http://127.0.0.1:8080">
+      </label>
+      <label>
+        <span>用户名</span>
+        <input id="qbUsername" autocomplete="username">
+      </label>
+      <label>
+        <span>密码</span>
+        <input id="qbPassword" type="password" autocomplete="current-password">
+      </label>
+      <label>
+        <span>保存路径（可空）</span>
+        <input id="savePath" placeholder="D:\Downloads">
+      </label>
+      <label>
+        <span>分类 category（可空）</span>
+        <input id="category" placeholder="M-Team">
+      </label>
+      <label>
+        <span>发送模式</span>
+        <select id="mode">
+          <option value="upload">upload：浏览器下载种子后上传给 qB（推荐）</option>
+          <option value="url">url：直接把下载 URL 交给 qB</option>
+        </select>
+      </label>
+      <label class="checkbox">
+        <input id="autoStart" type="checkbox">
+        <span>添加后自动开始下载</span>
+      </label>
+      <div class="actions">
+        <button id="save">保存</button>
+        <button id="test" type="button">测试连接</button>
+      </div>
+      <p id="status"></p>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

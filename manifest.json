@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "MTeam qB Sender",
+  "version": "0.1.0",
+  "description": "Send M-Team torrents to qBittorrent Web UI.",
+  "permissions": [
+    "storage",
+    "cookies",
+    "scripting",
+    "tabs",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://zp.m-team.io/*",
+        "https://*.m-team.io/*",
+        "https://*.m-team.cc/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "MTeam qB Sender",
+    "default_popup": "options.html"
+  },
+  "options_page": "options.html"
+}
