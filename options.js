@@ -5,7 +5,8 @@ const fields = {
   savePath: document.getElementById("savePath"),
   category: document.getElementById("category"),
   mode: document.getElementById("mode"),
-  autoStart: document.getElementById("autoStart")
+  autoStart: document.getElementById("autoStart"),
+  customSitesText: document.getElementById("customSitesText")
 };
 
 const statusEl = document.getElementById("status");
@@ -16,6 +17,12 @@ function setStatus(text, kind) {
 }
 
 function readForm() {
+  const customSites = fields.customSitesText.value
+    .split(/\r?\n/)
+    .map((line) => line.trim().toLowerCase())
+    .filter(Boolean)
+    .map((domain) => ({ domain, enabled: true }));
+
   return {
     qbAddress: fields.qbAddress.value.trim().replace(/\/+$/, ""),
     qbUsername: fields.qbUsername.value,
@@ -23,7 +30,8 @@ function readForm() {
     savePath: fields.savePath.value,
     category: fields.category.value,
     mode: fields.mode.value,
-    autoStart: fields.autoStart.checked
+    autoStart: fields.autoStart.checked,
+    customSites
   };
 }
 
@@ -35,6 +43,12 @@ function fillForm(config) {
   fields.category.value = config.category || "M-Team";
   fields.mode.value = config.mode || "upload";
   fields.autoStart.checked = config.autoStart !== false;
+  fields.customSitesText.value = Array.isArray(config.customSites)
+    ? config.customSites
+      .filter((site) => site && site.enabled !== false && site.domain)
+      .map((site) => site.domain)
+      .join("\n")
+    : "";
 }
 
 function sendMessage(message) {

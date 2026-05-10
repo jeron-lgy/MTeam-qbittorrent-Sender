@@ -13,10 +13,86 @@
   let batchButton = null;
   let configButton = null;
   let lastUrl = "";
+  let customSites = [];
+
+  const BUILT_IN_DOMAINS = [
+    "m-team.io",
+    "m-team.cc",
+    "totheglory.im",
+    "hdhome.org",
+    "hdsky.me",
+    "audiences.me",
+    "keepfrds.com",
+    "hhanclub.top",
+    "tjupt.org",
+    "ptlsp.com",
+    "springsunday.net",
+    "hdarea.club",
+    "hddolby.com"
+  ];
+
+  function domainMatches(domain) {
+    const value = String(domain || "").trim().toLowerCase();
+    return value && (location.hostname === value || location.hostname.endsWith("." + value));
+  }
+
+  function isBuiltInDomain() {
+    return BUILT_IN_DOMAINS.some(domainMatches);
+  }
+
+  function isCustomDomain() {
+    return customSites.some((site) => site && site.enabled !== false && domainMatches(site.domain));
+  }
+
+  function isMTeam() {
+    return /(^|\.)m-team\.(io|cc)$/.test(location.hostname);
+  }
+
+  function isDetailsLikePage() {
+    return /details\.php/i.test(location.pathname) ||
+      /\/t\/[0-9a-z_-]+/i.test(location.pathname) ||
+      /\/detail(s)?\/[0-9a-z_-]+/i.test(location.pathname);
+  }
+
+  function shouldShowWidget() {
+    return isMTeam() || isBuiltInDomain() || isCustomDomain() || isDetailsLikePage() || Boolean(findDownloadLink());
+  }
 
   function getTorrentId() {
     const match = location.href.match(/\/detail\/([0-9]+)/);
     return match ? match[1] : "";
+  }
+
+  function absoluteUrl(value) {
+    try {
+      return new URL(value, location.href).href;
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function findDownloadLink() {
+    const links = Array.from(document.querySelectorAll("a[href]"));
+    const candidates = links
+      .map((link) => ({
+        href: absoluteUrl(link.getAttribute("href")),
+        text: (link.textContent || "").trim(),
+        title: link.getAttribute("title") || ""
+      }))
+      .filter((item) => item.href);
+
+    const patterns = [
+      /download\.php\?/i,
+      /download\.php$/i,
+      /\/download\/[0-9a-z_-]+/i,
+      /\/dl\/[0-9a-z_-]+/i,
+      /\.torrent(?:$|\?)/i
+    ];
+    const byHref = candidates.find((item) => patterns.some((pattern) => pattern.test(item.href)));
+    if (byHref) return byHref.href;
+
+    const byText = candidates.find((item) => /下载|download|torrent|种子/i.test(item.text + " " + item.title));
+    return byText ? byText.href : "";
   }
 
   function getApiHost() {
@@ -39,6 +115,12 @@
     if (configButton) configButton.disabled = isBusy;
   }
 
+  function loadSiteConfig() {
+    return chrome.storage.local.get({ customSites: [] }).then((config) => {
+      customSites = Array.isArray(config.customSites) ? config.customSites : [];
+    });
+  }
+
   function sendMessage(message) {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(message, (response) => {
@@ -58,10 +140,17 @@
 
   function updateReadyState() {
     const torrentId = getTorrentId();
-    if (torrentId) {
-      setStatus("已识别当前种子 #" + torrentId, "idle");
+    const torrentUrl = findDownloadLink();
+    if (isMTeam() && torrentId) {
+      setStatus("已识别 M-Team 种子 #" + torrentId, "idle");
+    } else if (torrentUrl) {
+      setStatus("已识别 PT 下载链接，可发送本页。", "idle");
+    } else if (isCustomDomain()) {
+      setStatus("已匹配自定义 PT 站，请在种子详情页使用。", "idle");
+    } else if (isBuiltInDomain() || isDetailsLikePage()) {
+      setStatus("已匹配 PT 页面，正在等待下载链接。", "idle");
     } else {
-      setStatus("打开种子详情页后可发送，或批量发送已打开的详情页。", "idle");
+      setStatus("当前站点未启用。可在设置里添加小众 PT 站域名。", "idle");
     }
   }
 
@@ -80,14 +169,29 @@
 
   async function sendCurrentTorrent() {
     const torrentId = getTorrentId();
-    if (!torrentId) {
-      setStatus("当前不是种子详情页，未识别到种子 ID。", "error");
-      return;
-    }
+    const torrentUrl = findDownloadLink();
+    const payload = {
+      siteType: "generic",
+      siteName: location.hostname,
+      torrentUrl,
+      pageUrl: location.href,
+      title: document.title
+    };
 
-    const auth = getAuthToken();
-    if (!auth) {
-      setStatus("未找到 M-Team 登录凭证，请登录后刷新页面。", "error");
+    if (isMTeam() && torrentId) {
+      const auth = getAuthToken();
+      if (!auth) {
+        setStatus("未找到 M-Team 登录凭证，请登录后刷新页面。", "error");
+        return;
+      }
+      payload.siteType = "mteam";
+      payload.siteName = "M-Team";
+      payload.torrentId = torrentId;
+      payload.auth = auth;
+      payload.apiHost = getApiHost();
+      delete payload.torrentUrl;
+    } else if (!torrentUrl) {
+      setStatus("未在当前页面找到种子下载链接。", "error");
       return;
     }
 
@@ -96,13 +200,7 @@
     try {
       const response = await sendMessage({
         type: "sendTorrent",
-        payload: {
-          torrentId,
-          auth,
-          apiHost: getApiHost(),
-          pageUrl: location.href,
-          title: document.title
-        }
+        payload
       });
       setStatus(summarizeSingleResult(response.result || {}), "ok");
     } catch (error) {
@@ -142,6 +240,12 @@
   }
 
   function ensureWidget() {
+    if (!shouldShowWidget()) {
+      const host = document.getElementById(HOST_ID);
+      if (host) host.remove();
+      return;
+    }
+
     const existingHost = document.getElementById(HOST_ID);
     if (existingHost && statusEl) {
       updateReadyState();
@@ -182,7 +286,7 @@
       "</style>",
       "<div class='panel'>",
       "  <div class='top'>",
-      "    <div class='title'>M-Team qB 发送</div>",
+      "    <div class='title'>PT qB 发送</div>",
       "    <div class='dot'></div>",
       "  </div>",
       "  <div class='actions'>",
@@ -231,8 +335,10 @@
   }
 
   function start() {
-    ensureWidget();
-    watchUrlChanges();
+    loadSiteConfig().finally(() => {
+      ensureWidget();
+      watchUrlChanges();
+    });
   }
 
   if (document.readyState === "loading") {

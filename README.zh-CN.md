@@ -1,14 +1,16 @@
-# MTeam qB Sender
+# PT qB Sender
 
-一个用于 M-Team 的 Chrome MV3 扩展，可以把当前种子详情页，或已经打开的多个 M-Team 种子详情标签页，一键发送到 qBittorrent Web UI。
+一个用于 PT 站点的 Chrome MV3 扩展，可以把当前种子详情页，或已经打开的多个 PT 种子详情标签页，一键发送到 qBittorrent Web UI。
 
 ## 功能
 
-- 在 M-Team 页面右下角显示轻量悬浮面板。
+- 在支持的 PT 页面右下角显示轻量悬浮面板。
+- 默认支持 M-Team、新旧 NexusPHP 风格 `details.php` 详情页，以及常见 `download.php`、`/download/`、`/dl/`、`.torrent` 下载链接。
 - 支持发送当前种子详情页到 qBittorrent。
-- 支持批量发送当前 Chrome 中已经打开的 M-Team 种子详情页。
+- 支持批量发送当前 Chrome 中已经打开的 PT 种子详情页。
+- 支持在设置页的“站点支持”二级菜单里手动添加小众 PT 站域名。
 - 支持 `upload` 模式：扩展先下载 `.torrent` 文件，再上传到 qBittorrent。
-- 支持 `url` 模式：直接把 M-Team 下载链接交给 qBittorrent。
+- 支持 `url` 模式：直接把下载链接交给 qBittorrent。
 - 兼容 qBittorrent 5.2.x 的 Web API 行为，包括 `HTTP 204` 和 `HTTP 202 pending` 响应。
 - 发送后会在页面上显示中文状态，例如“发送成功”“qB 已接收”“后台处理中”。
 
@@ -58,18 +60,35 @@ http://127.0.0.1:8080
 
 推荐使用 `upload` 模式。
 
-- `upload`：扩展使用当前 M-Team 登录态下载种子文件，再上传给 qBittorrent。这个模式最稳，适合私站。
+- `upload`：扩展使用当前浏览器登录态下载种子文件，再上传给 qBittorrent。这个模式最稳，适合私站。
 - `url`：扩展直接把下载 URL 交给 qBittorrent。只有当 qBittorrent 能直接访问该 URL 时才适合使用。
+
+### 站点支持
+
+设置页里有一个“站点支持”折叠菜单。
+
+内置规则会自动支持：
+
+- M-Team 新版详情页。
+- 常见 NexusPHP 风格详情页，例如 `details.php`。
+- 页面中包含 `download.php`、`/download/`、`/dl/`、`.torrent` 链接的 PT 详情页。
+
+如果某个小众 PT 站没有自动出现发送面板，可以在“自定义 PT 站域名”中添加域名，一行一个，例如：
+
+```text
+example.pt
+tracker.example.org
+```
 
 ## 使用
 
-打开 M-Team 种子详情页后，右下角会出现悬浮面板：
+打开支持的 PT 种子详情页后，右下角会出现悬浮面板：
 
 - `发送本页`：发送当前详情页的种子。
-- `批量发送`：扫描当前已经打开的 M-Team 详情标签页，并逐个发送。
+- `批量发送`：扫描当前已经打开的支持站点详情标签页，并逐个发送。
 - `设`：打开扩展配置页。
 
-批量发送会按当前 Chrome 中标签页顺序处理，并自动跳过重复的种子 ID。
+批量发送会按当前 Chrome 中标签页顺序处理，并自动跳过重复的种子。
 
 ## qBittorrent 5.2.x 兼容说明
 

@@ -2,12 +2,12 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8">
-    <title>MTeam qB Sender</title>
+    <title>PT qB Sender</title>
     <link rel="stylesheet" href="options.css">
   </head>
   <body>
     <main>
-      <h1>MTeam qB Sender</h1>
+      <h1>PT qB Sender</h1>
       <label>
         <span>qBittorrent Web UI 地址</span>
         <input id="qbAddress" placeholder="http://127.0.0.1:8080">
@@ -39,6 +39,16 @@
         <input id="autoStart" type="checkbox">
         <span>添加后自动开始下载</span>
       </label>
+      <details class="site-settings">
+        <summary>站点支持</summary>
+        <div class="hint">
+          已内置 M-Team、常见 NexusPHP 详情页和一批主流 PT 域名。小众站点可在下面一行填写一个域名。
+        </div>
+        <label>
+          <span>自定义 PT 站域名</span>
+          <textarea id="customSitesText" rows="5" placeholder="example.pt&#10;tracker.example.org"></textarea>
+        </label>
+      </details>
       <div class="actions">
         <button id="save">保存</button>
         <button id="test" type="button">测试连接</button>

@@ -1,9 +1,5 @@
 const QB_RULE_ID = 1001;
-const MTEAM_URLS = [
-  "https://zp.m-team.io/*",
-  "https://*.m-team.io/*",
-  "https://*.m-team.cc/*"
-];
+const TAB_URLS = ["http://*/*", "https://*/*"];
 
 function normalizeAddress(address) {
   return String(address || "").replace(/\/+$/, "");
@@ -19,6 +15,10 @@ function escapeRegex(value) {
 
 function isMTeamDetailUrl(url) {
   return /^https:\/\/(?:[^/]+\.)?m-team\.(?:io|cc)\/detail\/[0-9]+/.test(String(url || ""));
+}
+
+function isLikelyTorrentPayload(payload) {
+  return Boolean(payload && (payload.torrentUrl || (payload.siteType === "mteam" && payload.torrentId)));
 }
 
 function formBody(data) {
@@ -103,7 +103,8 @@ function getConfig() {
     savePath: "",
     category: "M-Team",
     mode: "upload",
-    autoStart: true
+    autoStart: true,
+    customSites: []
   });
 }
 
@@ -222,6 +223,16 @@ async function getMTeamTorrentUrl({ torrentId, apiHost, auth }) {
     throw new Error("M-Team failed to create download token: " + (data.message || text));
   }
   return data.data;
+}
+
+async function getTorrentUrl(payload) {
+  if (payload.torrentUrl) {
+    return payload.torrentUrl;
+  }
+  if (payload.siteType === "mteam" || payload.torrentId) {
+    return getMTeamTorrentUrl(payload);
+  }
+  throw new Error("未找到种子下载链接。");
 }
 
 async function downloadTorrentFile(torrentUrl, auth) {
@@ -380,7 +391,7 @@ async function sendTorrentWithConfig(payload, config, options = {}) {
   if (!options.skipLogin) {
     await loginQb(config);
   }
-  const torrentUrl = await getMTeamTorrentUrl(payload);
+  const torrentUrl = await getTorrentUrl(payload);
   if (config.mode === "url") {
     const addResult = await addTorrentUrl(config, torrentUrl);
     return {
@@ -414,15 +425,95 @@ async function sendTorrent(payload) {
   return sendTorrentWithConfig(payload, config);
 }
 
-async function getMTeamPayloadFromTab(tab) {
+async function getMTeamPayloadFromTab(tab, customSites) {
   const result = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
-    func: () => {
-      const match = location.href.match(/\/detail\/([0-9]+)/);
+    args: [customSites || []],
+    func: (customSitesArg) => {
+      const builtInDomains = [
+        "m-team.io",
+        "m-team.cc",
+        "totheglory.im",
+        "hdhome.org",
+        "hdsky.me",
+        "audiences.me",
+        "keepfrds.com",
+        "hhanclub.top",
+        "tjupt.org",
+        "ptlsp.com",
+        "springsunday.net",
+        "hdarea.club",
+        "hddolby.com"
+      ];
+      const isMTeam = /(^|\.)m-team\.(io|cc)$/.test(location.hostname);
+      const mteamMatch = location.href.match(/\/detail\/([0-9]+)/);
+      const isBuiltInDomain = builtInDomains.some((domain) => location.hostname === domain || location.hostname.endsWith("." + domain));
+      const isCustomDomain = (Array.isArray(customSitesArg) ? customSitesArg : []).some((site) => {
+        if (!site || site.enabled === false || !site.domain) return false;
+        const domain = String(site.domain).trim().toLowerCase();
+        return location.hostname === domain || location.hostname.endsWith("." + domain);
+      });
+
+      function absoluteUrl(value) {
+        try {
+          return new URL(value, location.href).href;
+        } catch (error) {
+          return "";
+        }
+      }
+
+      function findDownloadLink() {
+        const links = Array.from(document.querySelectorAll("a[href]"));
+        const candidates = links
+          .map((link) => ({
+            href: absoluteUrl(link.getAttribute("href")),
+            text: (link.textContent || "").trim(),
+            title: link.getAttribute("title") || ""
+          }))
+          .filter((item) => item.href);
+
+        const patterns = [
+          /download\.php\?/i,
+          /download\.php$/i,
+          /\/download\/[0-9a-z_-]+/i,
+          /\/dl\/[0-9a-z_-]+/i,
+          /\.torrent(?:$|\?)/i
+        ];
+        const byHref = candidates.find((item) => patterns.some((pattern) => pattern.test(item.href)));
+        if (byHref) return byHref.href;
+
+        const byText = candidates.find((item) => /下载|download|torrent|种子/i.test(item.text + " " + item.title));
+        return byText ? byText.href : "";
+      }
+
+      function isDetailsLikePage() {
+        return /details\.php/i.test(location.pathname) ||
+          /\/t\/[0-9a-z_-]+/i.test(location.pathname) ||
+          /\/detail(s)?\/[0-9a-z_-]+/i.test(location.pathname);
+      }
+
+      if (isMTeam && mteamMatch) {
+        return {
+          siteType: "mteam",
+          siteName: "M-Team",
+          torrentId: mteamMatch[1],
+          auth: localStorage.getItem("auth") || "",
+          apiHost: localStorage.getItem("apiHost") || "https://api.m-team.cc/api",
+          pageUrl: location.href,
+          title: document.title
+        };
+      }
+
+      if (!isDetailsLikePage() && !isBuiltInDomain && !isCustomDomain) {
+        return { supported: false };
+      }
+
+      const torrentUrl = findDownloadLink();
       return {
-        torrentId: match ? match[1] : "",
-        auth: localStorage.getItem("auth") || "",
-        apiHost: localStorage.getItem("apiHost") || "https://api.m-team.cc/api",
+        siteType: "generic",
+        siteName: location.hostname,
+        torrentId: "",
+        torrentUrl,
         pageUrl: location.href,
         title: document.title
       };
@@ -432,32 +523,36 @@ async function getMTeamPayloadFromTab(tab) {
 }
 
 async function batchSendOpenTabs() {
-  const tabs = await chrome.tabs.query({ url: MTEAM_URLS });
+  const tabs = await chrome.tabs.query({ url: TAB_URLS });
   const detailTabs = tabs
-    .filter((tab) => tab.id && isMTeamDetailUrl(tab.url))
+    .filter((tab) => tab.id && /^https?:\/\//.test(String(tab.url || "")))
     .sort((a, b) => (a.windowId - b.windowId) || (a.index - b.index));
 
   if (!detailTabs.length) {
-    throw new Error("没有找到已打开的 M-Team 种子详情页。");
+    throw new Error("没有找到已打开的 PT 种子详情页。");
   }
 
+  const baseConfig = await getConfig();
+  const customSites = Array.isArray(baseConfig.customSites) ? baseConfig.customSites : [];
   const payloads = [];
   const seen = new Set();
   const collectErrors = [];
 
   for (const tab of detailTabs) {
     try {
-      const payload = await getMTeamPayloadFromTab(tab);
-      if (!payload || !payload.torrentId) {
-        collectErrors.push({ ok: false, title: tab.title || tab.url, error: "未识别到种子 ID" });
+      const payload = await getMTeamPayloadFromTab(tab, customSites);
+      if (!isLikelyTorrentPayload(payload)) {
         continue;
       }
-      if (!payload.auth) {
+      if (payload.siteType === "mteam" && !payload.auth) {
         collectErrors.push({ ok: false, title: tab.title || tab.url, error: "未找到 M-Team 登录凭证" });
         continue;
       }
-      if (seen.has(payload.torrentId)) continue;
-      seen.add(payload.torrentId);
+      const dedupeKey = payload.siteType + ":" + (payload.torrentId || payload.torrentUrl);
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
       payloads.push(payload);
     } catch (error) {
       collectErrors.push({
@@ -469,7 +564,7 @@ async function batchSendOpenTabs() {
   }
 
   if (!payloads.length) {
-    throw new Error(collectErrors[0] ? collectErrors[0].error : "没有可发送的 M-Team 种子详情页。");
+    throw new Error(collectErrors[0] ? collectErrors[0].error : "没有可发送的 PT 种子详情页。");
   }
 
   const config = await getReadyConfig();
@@ -556,7 +651,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function injectContentScriptIntoOpenTabs() {
-  const tabs = await chrome.tabs.query({ url: MTEAM_URLS });
+  const tabs = await chrome.tabs.query({ url: TAB_URLS });
   await Promise.allSettled(
     tabs
       .filter((tab) => tab.id)
