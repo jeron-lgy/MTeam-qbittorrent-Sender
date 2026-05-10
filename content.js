@@ -14,22 +14,45 @@
   let configButton = null;
   let lastUrl = "";
   let customSites = [];
+  let builtInSiteIds = null;
 
-  const BUILT_IN_DOMAINS = [
-    "m-team.io",
-    "m-team.cc",
-    "totheglory.im",
-    "hdhome.org",
-    "hdsky.me",
-    "audiences.me",
-    "keepfrds.com",
-    "hhanclub.top",
-    "tjupt.org",
-    "ptlsp.com",
-    "springsunday.net",
-    "hdarea.club",
-    "hddolby.com"
+  const BUILT_IN_SITES = [
+    { id: "mteam", name: "M-Team", domains: ["m-team.io", "m-team.cc"] },
+    { id: "totheglory", name: "ToTheGlory", domains: ["totheglory.im"] },
+    { id: "hdhome", name: "HDHome", domains: ["hdhome.org"] },
+    { id: "hdsky", name: "HDSky", domains: ["hdsky.me"] },
+    { id: "audiences", name: "Audiences", domains: ["audiences.me"] },
+    { id: "keepfriends", name: "KeepFriends", domains: ["keepfrds.com"] },
+    { id: "hhanclub", name: "HhanClub", domains: ["hhanclub.top"] },
+    { id: "tjupt", name: "TJUPT", domains: ["tjupt.org"] },
+    { id: "ptlsp", name: "PTLSP", domains: ["ptlsp.com"] },
+    { id: "springsunday", name: "SpringSunday", domains: ["springsunday.net"] },
+    { id: "hdarea", name: "HDArea", domains: ["hdarea.club"] },
+    { id: "hddolby", name: "HDDolby", domains: ["hddolby.com"] }
   ];
+
+  function defaultBuiltInSiteIds() {
+    const result = {};
+    BUILT_IN_SITES.forEach((site) => {
+      result[site.id] = true;
+    });
+    return result;
+  }
+
+  function normalizeBuiltInSiteIds(value) {
+    const defaults = defaultBuiltInSiteIds();
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return defaults;
+    }
+    return { ...defaults, ...value };
+  }
+
+  function getEnabledBuiltInDomains() {
+    const enabled = normalizeBuiltInSiteIds(builtInSiteIds);
+    return BUILT_IN_SITES
+      .filter((site) => enabled[site.id] !== false)
+      .flatMap((site) => site.domains);
+  }
 
   function domainMatches(domain) {
     const value = String(domain || "").trim().toLowerCase();
@@ -37,7 +60,7 @@
   }
 
   function isBuiltInDomain() {
-    return BUILT_IN_DOMAINS.some(domainMatches);
+    return getEnabledBuiltInDomains().some(domainMatches);
   }
 
   function isCustomDomain() {
@@ -55,7 +78,13 @@
   }
 
   function shouldShowWidget() {
-    return isMTeam() || isBuiltInDomain() || isCustomDomain() || isDetailsLikePage() || Boolean(findDownloadLink());
+    if (!isBuiltInDomain() && !isCustomDomain()) {
+      return false;
+    }
+    if (isMTeam()) {
+      return Boolean(getTorrentId());
+    }
+    return isDetailsLikePage() || Boolean(findDownloadLink());
   }
 
   function getTorrentId() {
@@ -116,7 +145,8 @@
   }
 
   function loadSiteConfig() {
-    return chrome.storage.local.get({ customSites: [] }).then((config) => {
+    return chrome.storage.local.get({ builtInSiteIds: null, customSites: [] }).then((config) => {
+      builtInSiteIds = normalizeBuiltInSiteIds(config.builtInSiteIds);
       customSites = Array.isArray(config.customSites) ? config.customSites : [];
     });
   }
@@ -147,7 +177,7 @@
       setStatus("已识别 PT 下载链接，可发送本页。", "idle");
     } else if (isCustomDomain()) {
       setStatus("已匹配自定义 PT 站，请在种子详情页使用。", "idle");
-    } else if (isBuiltInDomain() || isDetailsLikePage()) {
+    } else if (isBuiltInDomain()) {
       setStatus("已匹配 PT 页面，正在等待下载链接。", "idle");
     } else {
       setStatus("当前站点未启用。可在设置里添加小众 PT 站域名。", "idle");
@@ -212,7 +242,7 @@
 
   async function batchSendOpenTabs() {
     setBusy(true);
-    setStatus("正在批量发送已打开的 M-Team 详情页...", "busy");
+    setStatus("正在批量发送已打开的 PT 详情页...", "busy");
     try {
       const response = await sendMessage({ type: "batchSendOpenTabs" });
       const result = response.result || {};

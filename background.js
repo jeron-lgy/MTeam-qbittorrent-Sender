@@ -1,5 +1,42 @@
 const QB_RULE_ID = 1001;
 const TAB_URLS = ["http://*/*", "https://*/*"];
+const BUILT_IN_SITES = [
+  { id: "mteam", name: "M-Team", domains: ["m-team.io", "m-team.cc"] },
+  { id: "totheglory", name: "ToTheGlory", domains: ["totheglory.im"] },
+  { id: "hdhome", name: "HDHome", domains: ["hdhome.org"] },
+  { id: "hdsky", name: "HDSky", domains: ["hdsky.me"] },
+  { id: "audiences", name: "Audiences", domains: ["audiences.me"] },
+  { id: "keepfriends", name: "KeepFriends", domains: ["keepfrds.com"] },
+  { id: "hhanclub", name: "HhanClub", domains: ["hhanclub.top"] },
+  { id: "tjupt", name: "TJUPT", domains: ["tjupt.org"] },
+  { id: "ptlsp", name: "PTLSP", domains: ["ptlsp.com"] },
+  { id: "springsunday", name: "SpringSunday", domains: ["springsunday.net"] },
+  { id: "hdarea", name: "HDArea", domains: ["hdarea.club"] },
+  { id: "hddolby", name: "HDDolby", domains: ["hddolby.com"] }
+];
+
+function defaultBuiltInSiteIds() {
+  const result = {};
+  BUILT_IN_SITES.forEach((site) => {
+    result[site.id] = true;
+  });
+  return result;
+}
+
+function normalizeBuiltInSiteIds(value) {
+  const defaults = defaultBuiltInSiteIds();
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return defaults;
+  }
+  return { ...defaults, ...value };
+}
+
+function getEnabledBuiltInDomains(value) {
+  const enabled = normalizeBuiltInSiteIds(value);
+  return BUILT_IN_SITES
+    .filter((site) => enabled[site.id] !== false)
+    .flatMap((site) => site.domains);
+}
 
 function normalizeAddress(address) {
   return String(address || "").replace(/\/+$/, "");
@@ -104,6 +141,7 @@ function getConfig() {
     category: "M-Team",
     mode: "upload",
     autoStart: true,
+    builtInSiteIds: null,
     customSites: []
   });
 }
@@ -425,26 +463,13 @@ async function sendTorrent(payload) {
   return sendTorrentWithConfig(payload, config);
 }
 
-async function getMTeamPayloadFromTab(tab, customSites) {
+async function getMTeamPayloadFromTab(tab, customSites, builtInSiteIds) {
+  const enabledBuiltInDomains = getEnabledBuiltInDomains(builtInSiteIds);
   const result = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
-    args: [customSites || []],
-    func: (customSitesArg) => {
-      const builtInDomains = [
-        "m-team.io",
-        "m-team.cc",
-        "totheglory.im",
-        "hdhome.org",
-        "hdsky.me",
-        "audiences.me",
-        "keepfrds.com",
-        "hhanclub.top",
-        "tjupt.org",
-        "ptlsp.com",
-        "springsunday.net",
-        "hdarea.club",
-        "hddolby.com"
-      ];
+    args: [customSites || [], enabledBuiltInDomains],
+    func: (customSitesArg, enabledDomainsArg) => {
+      const builtInDomains = Array.isArray(enabledDomainsArg) ? enabledDomainsArg : [];
       const isMTeam = /(^|\.)m-team\.(io|cc)$/.test(location.hostname);
       const mteamMatch = location.href.match(/\/detail\/([0-9]+)/);
       const isBuiltInDomain = builtInDomains.some((domain) => location.hostname === domain || location.hostname.endsWith("." + domain));
@@ -486,13 +511,7 @@ async function getMTeamPayloadFromTab(tab, customSites) {
         return byText ? byText.href : "";
       }
 
-      function isDetailsLikePage() {
-        return /details\.php/i.test(location.pathname) ||
-          /\/t\/[0-9a-z_-]+/i.test(location.pathname) ||
-          /\/detail(s)?\/[0-9a-z_-]+/i.test(location.pathname);
-      }
-
-      if (isMTeam && mteamMatch) {
+      if (isMTeam && isBuiltInDomain && mteamMatch) {
         return {
           siteType: "mteam",
           siteName: "M-Team",
@@ -504,7 +523,7 @@ async function getMTeamPayloadFromTab(tab, customSites) {
         };
       }
 
-      if (!isDetailsLikePage() && !isBuiltInDomain && !isCustomDomain) {
+      if (!isBuiltInDomain && !isCustomDomain) {
         return { supported: false };
       }
 
@@ -534,13 +553,14 @@ async function batchSendOpenTabs() {
 
   const baseConfig = await getConfig();
   const customSites = Array.isArray(baseConfig.customSites) ? baseConfig.customSites : [];
+  const builtInSiteIds = normalizeBuiltInSiteIds(baseConfig.builtInSiteIds);
   const payloads = [];
   const seen = new Set();
   const collectErrors = [];
 
   for (const tab of detailTabs) {
     try {
-      const payload = await getMTeamPayloadFromTab(tab, customSites);
+      const payload = await getMTeamPayloadFromTab(tab, customSites, builtInSiteIds);
       if (!isLikelyTorrentPayload(payload)) {
         continue;
       }

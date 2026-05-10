@@ -85,6 +85,60 @@ textarea {
   line-height: 1.5;
 }
 
+.section-title {
+  margin: 12px 0 8px;
+  color: #2f363d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.built-in-sites {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.site-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 9px;
+  border: 1px solid #ead3dc;
+  border-radius: 8px;
+  background: #fff8fb;
+}
+
+.site-option input {
+  width: auto;
+  margin-top: 2px;
+}
+
+.site-option .site-text {
+  display: block;
+  min-width: 0;
+  margin: 0;
+}
+
+.site-option .site-name {
+  display: block;
+  margin: 0 0 3px;
+  color: #4b2d3a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.site-option .site-domains {
+  display: block;
+  margin: 0;
+  color: #6f5963;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
 .actions {
   display: flex;
   gap: 8px;
